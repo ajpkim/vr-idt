@@ -6,38 +6,37 @@ import pandas as pd
 GAZE_COLS = ["gaze_world_z", "gaze_world_y", "gaze_world_z"]
 HEAD_COLS = ["head_pos_z", "head_pos_y", "head_pos_z"]
 
-def foo():
-    print("HAHA")
 
 def get_gaze_head_matrices(df: pd.DataFrame, cols: dict) -> (np.array, np.array):
     """Return matrices with 3d vectors for VR world gaze locations and head positions."""
     gaze_cols = [cols[x] for x in GAZE_COLS]
     head_cols = [cols[x] for x in HEAD_COLS]
 
-    gaze_coords = df.loc[:, [gaze_cols]].values
-    head_coords = df.loc[:, [head_cols]].values
+    gaze_coords = df.loc[:, gaze_cols].values
+    head_coords = df.loc[:, head_cols].values
 
     return gaze_coords, head_coords
 
 
-def frequencies(df: pd.DataFrame, time="time") -> pd.Series:
+def frequencies(times: pd.Series, time="time") -> pd.Series:
     """Compute the sampling frequency for all data points based on
     adjacent sample times.
 
     Args:
     df --  pd.DataFrame
-    time -- Name of columns in df which has time data in seconds
+    time -- Name of column in df which has time data in seconds
 
     Returns:
-    sample_freq -- pd.Series of sampling rates
+    sample_freqs -- pd.Series of sampling rates in hz (samples/sec)
     """
-    sample_freq = df["time"].diff()
-    sample_freq[0] = df["time"].iloc[0]
-    return sample_freq
+    sample_freqs = times.diff()
+    sample_freqs[0] = times.iloc[0]
+    sample_freqs = 1 / sample_freqs
+    return sample_freqs
 
 
 def valid_frequences(sample_freqs: np.array, min_freq: float) -> bool:
-    return any(freq < min_freq for freq in sample_freqs)
+    return all(freq > min_freq for freq in sample_freqs)
 
 
 def angle_between(v1: np.array, v2: np.array) -> float:
@@ -92,16 +91,14 @@ def is_fixation(
         min_freq: int
 ) -> bool:
     """Return a bool indicating whether the given window is part of a fixation"""
-    window_gaze_coords = gaze_coords[window_start:window_end+1]
-    window_head_coords = head_coords[window_start:window_end+1]
-
     if not valid_frequences(sample_freqs[window_start:window_end+1], min_freq):
         return False
-
+    window_gaze_coords = gaze_coords[window_start:window_end+1]
+    window_head_coords = head_coords[window_start:window_end+1]
     return valid_window_angles(window_gaze_coords, window_head_coords, max_angle)
 
 
-def vr_itd(
+def vr_idt(
         df: pd.DataFrame,
         min_duration         =0.15,
         max_angle            =1.50,
@@ -113,7 +110,6 @@ def vr_itd(
         head_pos_x           ="head_pos_x",
         head_pos_y           ="head_pos_y",
         head_pos_z           ="head_pos_z",
-        inplace              =False
 ) -> pd.DataFrame:
     """
     Implements the VR IDT algorithm as proposed in:
@@ -137,16 +133,16 @@ def vr_itd(
     sample_freqs = frequencies(df[time])
     gaze_coords, head_coords = get_gaze_head_matrices(df, cols)
     fixation_cols = ["fixation", "fixation_start", "fixation_end", "fixation_duration"]
-    fixation_df = pd.DataFrame(np.zeros(df.shape[0], len(fixation_cols), int),
+    fixation_df = pd.DataFrame(np.zeros((df.shape[0], len(fixation_cols)), int),
                                columns=fixation_cols)
-    final = data.shape[0] - 1
+    final = df.shape[0] - 1
     window_start = 0
 
     # Find fixation windows
     while window_start < final:
         window_end = window_start + 1
         # Extend window until total window time exceeds the given minimum valid window time
-        while (df[time].iloc[window_end] - df[time].iloc[window_start]) < min_duration:
+        while df.loc[window_end, time] - df.loc[window_start, time] < min_duration:
             window_end += 1
             if window_end > final:
                 return fixation_df
@@ -161,11 +157,11 @@ def vr_itd(
                 window_end += 1
             window_end -= 1  # decrement since we've exceeded the fixation window in last loop iteration
             # Process the previous fixation window
-            duration = df[time].iloc[window_end] - df[time].iloc[window_start]
-            fixation_df["fixation_start"].iloc[window_start] = 1
-            fixation_df["fixation_end"].iloc[window_end] = 1
-            fixation_df["fixation"].iloc[window_start:window_end+1] = 1
-            fixation_df["fixation_duration"].iloc[window_end] = duration
+            duration = df.loc[window_end, time] - df.loc[window_start, time]
+            fixation_df.loc[window_start, "fixation_start"] = 1
+            fixation_df.loc[window_end, "fixation_end"] = 1
+            fixation_df.loc[window_start:window_end+1, "fixation"]= 1
+            fixation_df.loc[window_end, "fixation_duration"] = duration
 
             window_start = window_end
 
