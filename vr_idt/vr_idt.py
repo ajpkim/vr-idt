@@ -17,58 +17,49 @@ def get_gaze_head_matrices(df: pd.DataFrame, cols: dict) -> (np.array, np.array)
 
     return gaze_coords, head_coords
 
-
 def frequencies(times: pd.Series, time="time") -> pd.Series:
-    """Compute the sampling frequency for all data points based on
-    adjacent sample times.
+    """Compute the sampling frequency for all data points based on adjacent sample times.
 
     Args:
-    df --  pd.DataFrame
-    time -- Name of column in df which has time data in seconds
+    - df: pd.DataFrame
+    - time: Name of column in df which has time data in seconds
 
     Returns:
-    sample_freqs -- pd.Series of sampling rates in hz (samples/sec)
+    - sample_freqs -- pd.Series of sampling rates in hz (samples/sec)
     """
     sample_freqs = times.diff()
     sample_freqs[0] = times.iloc[0]
     sample_freqs = 1 / sample_freqs
     return sample_freqs
 
-
 def valid_frequences(sample_freqs: np.array, min_freq: float) -> bool:
+    """Check that all the frequencies are above given minimum."""
     return all(freq > min_freq for freq in sample_freqs)
-
 
 def angle_between(v1: np.array, v2: np.array) -> float:
     """Compute the angle theta between vectors v1 and v2.
 
     The scalar product of v1 and v2 is defined as:
-
       dot(v1,v2) = mag(v1) * mag(v2) * cos(theta)
 
     where dot() is a function which computes the dot product and mag()
     is a function which computes the magnitude of the given vector.
 
     Args:
-    v1 -- vector with dim (m x n)
-    v2 -- vector with dim (m x n)
+    - v1: vector with dim (m x n)
+    - v2: with dim (m x n)
 
     Returns:
-    theta -- the angle between vectors v1 and v2 in degrees.
+    - theta: angle between vectors v1 and v2 in degrees.
     """
     norms = np.linalg.norm(v1) * np.linalg.norm(v2)
     cos_theta = np.dot(v1, v2) / norms
     theta = np.arccos(np.clip(cos_theta, -1, 1))
     return np.rad2deg(theta)
 
-
-def valid_window_angles(
-        window_gaze_coords: np.array,
-        window_head_coords: np.array,
-        max_angle: int
-) -> bool:
-    """Return a boolean for whether the dispersion angles for all
-    pairs of samples in the given window are within the valid fixation
+def valid_window_angles(window_gaze_coords: np.array, window_head_coords: np.array, max_angle: int) -> bool:
+    """Return a boolean for whether the dispersion angles for all pairs
+    of samples in the given window are within the valid fixation
     threshold defined by max_angle.
     """
     vectors = window_gaze_coords - np.mean(window_head_coords, axis=0)
@@ -81,16 +72,15 @@ def valid_window_angles(
     return True
 
 
-def is_fixation(
-        gaze_coords: np.array,
-        head_coords: np.array,
-        sample_freqs: np.array,
-        window_start: int,
-        window_end: int,
-        max_angle: float,
-        min_freq: int
-) -> bool:
-    """Return a bool indicating whether the given window is part of a fixation"""
+def is_fixation(gaze_coords  : np.array,
+                head_coords  : np.array,
+                sample_freqs : np.array,
+                window_start : int,
+                window_end   : int,
+                max_angle    : float,
+                min_freq     : int
+                ) -> bool:
+    """Return a bool indicating whether the given window is part of a fixation."""
     if not valid_frequences(sample_freqs[window_start:window_end+1], min_freq):
         return False
     window_gaze_coords = gaze_coords[window_start:window_end+1]
@@ -98,24 +88,42 @@ def is_fixation(
     return valid_window_angles(window_gaze_coords, window_head_coords, max_angle)
 
 
-def vr_idt(
-        df: pd.DataFrame,
-        min_duration         =0.15,
-        max_angle            =1.50,
-        min_freq             =30,
-        time                 ="time",
-        gaze_world_x         ="gaze_world_x",
-        gaze_world_y         ="gaze_world_y",
-        gaze_world_z         ="gaze_world_z",
-        head_pos_x           ="head_pos_x",
-        head_pos_y           ="head_pos_y",
-        head_pos_z           ="head_pos_z",
-) -> pd.DataFrame:
-    """
-    Implements the VR IDT algorithm as proposed in:
-    https://www.mdpi.com/1424-8220/20/17/4956. Original code from
-    authors is here:
-    https://github.com/ASAPLableni/VR-centred_I-DT_algorithm.
+def vr_idt(df,
+           min_duration         = 0.15,
+           max_angle            = 1.50,
+           min_freq             = 30,
+           time                 = "time",
+           gaze_world_x         = "gaze_world_x",
+           gaze_world_y         = "gaze_world_y",
+           gaze_world_z         = "gaze_world_z",
+           head_pos_x           = "head_pos_x",
+           head_pos_y           = "head_pos_y",
+           head_pos_z           = "head_pos_z",
+           ) -> pd.DataFrame:
+    """Classify VR eye fixation events in eye-tracking data.
+
+    Args:
+    - df: pd.DataFrame with eye tracking data to classify
+    - min_duration: The minimum length of a fixation in ms
+    - max_angle: The maximum angle of dispersion within the fixation within
+    - min_freq: The minimum required frequency for a fixation to be classified
+
+    The rest of the args specify the column names in the given df that provide required data
+    - time: name of col where time (ms) data is
+    - gaze_world_x: name of col where 'gaze_world_x' data is (gaze position in virtual world)
+    - gaze_world_y: name of col where 'gaze_world_y' data is (gaze position in virtual world)
+    - gaze_world_z: name of col where 'gaze_world_z' data is (gaze position in virtual world)
+    - head_pos_x: name of col where 'head_pos_x' data is (head position in physical space)
+    - head_pos_y: name of col where 'head_pos_y' data is (head position in physical space)
+    - head_pos_z: name of col where 'head_pos_z' data is (head position in physical space)
+
+    Returns:
+    - fixation_df: pd.DataFrame with 4 cols:
+      - "fixation": sample is within a fixation
+      - "fixation_start" sample is the beginning of a fixation
+      - "fixation_end" sample is the final sample in a fixation
+      - "fixation_duration" length of the fixation which ends on current sample
+
     """
     # Mapping to column names in the given df
     cols = {"time": time,
@@ -133,8 +141,7 @@ def vr_idt(
     sample_freqs = frequencies(df[time])
     gaze_coords, head_coords = get_gaze_head_matrices(df, cols)
     fixation_cols = ["fixation", "fixation_start", "fixation_end", "fixation_duration"]
-    fixation_df = pd.DataFrame(np.zeros((df.shape[0], len(fixation_cols)), int),
-                               columns=fixation_cols)
+    fixation_df = pd.DataFrame(np.zeros((df.shape[0], len(fixation_cols)), int), columns=fixation_cols)
     final = df.shape[0] - 1
     window_start = 0
 
@@ -145,7 +152,7 @@ def vr_idt(
         while df.loc[window_end, time] - df.loc[window_start, time] < min_duration:
             window_end += 1
             if window_end > final:
-                return fixation_df
+                return df.join(fixation_df)
 
         # Current window isn't a valid fixation, increment start
         if not is_fixation(gaze_coords, head_coords, sample_freqs, window_start, window_end, max_angle, min_freq):
@@ -165,4 +172,4 @@ def vr_idt(
 
             window_start = window_end
 
-    return fixation_df
+    return df.join(fixation_df)
