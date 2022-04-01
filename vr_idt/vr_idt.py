@@ -3,8 +3,8 @@ from typing import List
 import numpy as np
 import pandas as pd
 
-GAZE_COLS = ["gaze_world_z", "gaze_world_y", "gaze_world_z"]
-HEAD_COLS = ["head_pos_z", "head_pos_y", "head_pos_z"]
+GAZE_COLS = ["gaze_world_x", "gaze_world_y", "gaze_world_z"]
+HEAD_COLS = ["head_pos_x", "head_pos_y", "head_pos_z"]
 
 
 def get_gaze_head_matrices(df: pd.DataFrame, cols: dict) -> (np.array, np.array):
