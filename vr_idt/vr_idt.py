@@ -3,14 +3,10 @@ from typing import List
 import numpy as np
 import pandas as pd
 
-GAZE_COLS = ["gaze_world_x", "gaze_world_y", "gaze_world_z"]
-HEAD_COLS = ["head_pos_x", "head_pos_y", "head_pos_z"]
-
-
-def get_gaze_head_matrices(df: pd.DataFrame, cols: dict) -> (np.array, np.array):
+def get_gaze_head_matrices(df: pd.DataFrame, col_name_map: dict) -> (np.array, np.array):
     """Return matrices with 3d vectors for VR world gaze locations and head positions."""
-    gaze_cols = [cols[x] for x in GAZE_COLS]
-    head_cols = [cols[x] for x in HEAD_COLS]
+    gaze_cols = [col_name_map[col] for col in col_name_map.keys() if "gaze" in col]
+    head_cols = [col_name_map[col] for col in col_name_map.keys() if "head" in col]
 
     gaze_coords = df.loc[:, gaze_cols].values
     head_coords = df.loc[:, head_cols].values
@@ -21,11 +17,11 @@ def frequencies(times: pd.Series, time="time") -> pd.Series:
     """Compute the sampling frequency for all data points based on adjacent sample times.
 
     Args:
-    - df: pd.DataFrame
-    - time: Name of column in df which has time data in seconds
+        df: pd.DataFrame
+        time: Name of column in df which has time data in seconds
 
     Returns:
-    - sample_freqs -- pd.Series of sampling rates in hz (samples/sec)
+        sample_freqs -- pd.Series of sampling rates in hz (samples/sec)
     """
     sample_freqs = times.diff()
     sample_freqs[0] = times.iloc[0]
@@ -46,11 +42,11 @@ def angle_between(v1: np.array, v2: np.array) -> float:
     is a function which computes the magnitude of the given vector.
 
     Args:
-    - v1: vector with dim (m x n)
-    - v2: with dim (m x n)
+        v1: vector with dim (m x n)
+        v2: with dim (m x n)
 
     Returns:
-    - theta: angle between vectors v1 and v2 in degrees.
+        theta: angle between vectors v1 and v2 in degrees.
     """
     norms = np.linalg.norm(v1) * np.linalg.norm(v2)
     cos_theta = np.dot(v1, v2) / norms
@@ -58,10 +54,7 @@ def angle_between(v1: np.array, v2: np.array) -> float:
     return np.rad2deg(theta)
 
 def valid_window_angles(window_gaze_coords: np.array, window_head_coords: np.array, max_angle: int) -> bool:
-    """Return a boolean for whether the dispersion angles for all pairs
-    of samples in the given window are within the valid fixation
-    threshold defined by max_angle.
-    """
+    """Check if angle dispersions within window are valid for fixation classification."""
     vectors = window_gaze_coords - np.mean(window_head_coords, axis=0)
     for i in range(vectors.shape[0]):
         v1 = vectors[i]
@@ -71,15 +64,13 @@ def valid_window_angles(window_gaze_coords: np.array, window_head_coords: np.arr
                 return False
     return True
 
-
-def is_fixation(gaze_coords  : np.array,
-                head_coords  : np.array,
-                sample_freqs : np.array,
-                window_start : int,
-                window_end   : int,
-                max_angle    : float,
-                min_freq     : int
-                ) -> bool:
+def is_fixation(gaze_coords: np.array,
+                head_coords: np.array,
+                sample_freqs: np.array,
+                window_start: int,
+                window_end: int,
+                max_angle: float,
+                min_freq: int) -> bool:
     """Return a bool indicating whether the given window is part of a fixation."""
     if not valid_frequences(sample_freqs[window_start:window_end+1], min_freq):
         return False
@@ -87,59 +78,50 @@ def is_fixation(gaze_coords  : np.array,
     window_head_coords = head_coords[window_start:window_end+1]
     return valid_window_angles(window_gaze_coords, window_head_coords, max_angle)
 
-
-def classify_fixations(df,
-           min_duration         = 0.15,
-           max_angle            = 1.50,
-           min_freq             = 30,
-           time                 = "time",
-           gaze_world_x         = "gaze_world_x",
-           gaze_world_y         = "gaze_world_y",
-           gaze_world_z         = "gaze_world_z",
-           head_pos_x           = "head_pos_x",
-           head_pos_y           = "head_pos_y",
-           head_pos_z           = "head_pos_z",
-           ) -> pd.DataFrame:
+def classify_fixations(df: pd.DataFrame,
+                       min_duration: float = 0.15,
+                       max_angle: float = 1.50,
+                       min_freq: float = 30.0,
+                       time: str = "time",
+                       gaze_world_x: str = "gaze_world_x",
+                       gaze_world_y: str = "gaze_world_y",
+                       gaze_world_z: str = "gaze_world_z",
+                       head_pos_x: str = "head_pos_x",
+                       head_pos_y: str = "head_pos_y",
+                       head_pos_z: str = "head_pos_z") -> pd.DataFrame:
     """Classify VR eye fixation events in eye-tracking data.
 
     Args:
-    - df: pd.DataFrame with eye tracking data to classify
-    - min_duration: The minimum length of a fixation in ms
-    - max_angle: The maximum angle of dispersion within the fixation within
-    - min_freq: The minimum required frequency for a fixation to be classified
-
-    The rest of the args specify the column names in the given df that provide required data
-    - time: name of col where time (sec) data is
-    - gaze_world_x: name of col where 'gaze_world_x' data is (gaze position in virtual world)
-    - gaze_world_y: name of col where 'gaze_world_y' data is (gaze position in virtual world)
-    - gaze_world_z: name of col where 'gaze_world_z' data is (gaze position in virtual world)
-    - head_pos_x: name of col where 'head_pos_x' data is (head position in physical space)
-    - head_pos_y: name of col where 'head_pos_y' data is (head position in physical space)
-    - head_pos_z: name of col where 'head_pos_z' data is (head position in physical space)
-
+        df: DataFrame with eye tracking data to classify
+        min_duration: The minimum length of a fixation in seconds
+        max_angle: The maximum angle of dispersion within the fixation within
+        min_freq: The minimum required frequency for a fixation to be classified
+        time: df column name for time (sec) data
+        gaze_world_x: df column name for gaze position in virtual world data
+        gaze_world_y: df column name for gaze position in virtual world data
+        gaze_world_z: df column name for gaze position in virtual world data
+        head_pos_x: df column name for head position in physical space data
+        head_pos_y: df column name for head position in physical space data
+        head_pos_z: df column name for head position in physical space data
     Returns:
-    - fixation_df: pd.DataFrame with 4 cols:
-      - "fixation": sample is within a fixation
-      - "fixation_start" sample is the beginning of a fixation
-      - "fixation_end" sample is the final sample in a fixation
-      - "fixation_duration" length of the fixation which ends on current sample
-
+        fixation_df: Copy of original arg 'df' with 4 new fixation related columns:
+            "fixation", "fixation_start", "fixation_end", and "fixation_duration"
     """
-    # Mapping to column names in the given df
-    cols = {"time": time,
-            "gaze_world_x": gaze_world_x,
-            "gaze_world_y": gaze_world_y,
-            "gaze_world_z": gaze_world_z,
-            "head_pos_x": head_pos_x,
-            "head_pos_y": head_pos_y,
-            "head_pos_z": head_pos_z}
+    # Create mapping to column names in the given df
+    col_name_map = {"time": time,
+                    "gaze_world_x": gaze_world_x,
+                    "gaze_world_y": gaze_world_y,
+                    "gaze_world_z": gaze_world_z,
+                    "head_pos_x": head_pos_x,
+                    "head_pos_y": head_pos_y,
+                    "head_pos_z": head_pos_z}
 
-    if not all(col in df.columns for col in list(cols.values())):
-        raise Exception(f"DataFrame is missing some columns from <{cols}>")
+    if not all(col in df.columns for col in list(col_name_map.values())):
+        raise Exception(f"DataFrame is missing some columns from <{col_name_map}>")
 
     # Initialize matrices, results DF, window indices
     sample_freqs = frequencies(df[time])
-    gaze_coords, head_coords = get_gaze_head_matrices(df, cols)
+    gaze_coords, head_coords = get_gaze_head_matrices(df, col_name_map)
     fixation_cols = ["fixation", "fixation_start", "fixation_end", "fixation_duration"]
     fixation_df = pd.DataFrame(np.zeros((df.shape[0], len(fixation_cols)), int), columns=fixation_cols)
     final = df.shape[0] - 1
