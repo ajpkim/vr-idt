@@ -88,7 +88,7 @@ def is_fixation(gaze_coords  : np.array,
     return valid_window_angles(window_gaze_coords, window_head_coords, max_angle)
 
 
-def vr_idt(df,
+def classify_fixations(df,
            min_duration         = 0.15,
            max_angle            = 1.50,
            min_freq             = 30,
@@ -109,7 +109,7 @@ def vr_idt(df,
     - min_freq: The minimum required frequency for a fixation to be classified
 
     The rest of the args specify the column names in the given df that provide required data
-    - time: name of col where time (ms) data is
+    - time: name of col where time (sec) data is
     - gaze_world_x: name of col where 'gaze_world_x' data is (gaze position in virtual world)
     - gaze_world_y: name of col where 'gaze_world_y' data is (gaze position in virtual world)
     - gaze_world_z: name of col where 'gaze_world_z' data is (gaze position in virtual world)
@@ -135,7 +135,7 @@ def vr_idt(df,
             "head_pos_z": head_pos_z}
 
     if not all(col in df.columns for col in list(cols.values())):
-        raise Exception(f"DataFrame is missing some columns from <{df_cols}>")
+        raise Exception(f"DataFrame is missing some columns from <{cols}>")
 
     # Initialize matrices, results DF, window indices
     sample_freqs = frequencies(df[time])
