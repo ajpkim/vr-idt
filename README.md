@@ -14,7 +14,7 @@ Install this package using `pip` ([Python virtual environments](https://docs.pyt
 
 `$ pip install vr-idt`
 
-## Documentation
+## Classify fixations
 
 ```python
 def classify_fixations(df: pd.DataFrame,

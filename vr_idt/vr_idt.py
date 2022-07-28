@@ -149,7 +149,7 @@ def classify_fixations(df: pd.DataFrame,
             duration = df.loc[window_end, time] - df.loc[window_start, time]
             fixation_df.loc[window_start, "fixation_start"] = 1
             fixation_df.loc[window_end, "fixation_end"] = 1
-            fixation_df.loc[window_start:window_end+1, "fixation"]= 1
+            fixation_df.loc[window_start:window_end, "fixation"] = 1
             fixation_df.loc[window_end, "fixation_duration"] = duration
 
             window_start = window_end
